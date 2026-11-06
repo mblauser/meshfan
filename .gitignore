@@ -1,0 +1,60 @@
+# === Secrets / credentials — NEVER commit ===
+# Real configuration (contains hostnames, IPs, keys). Only *.example.* is committed.
+config/*.yaml
+config/*.yml
+config/*.json
+!config/meshfan.example.yaml
+!config/meshfan.example.yml
+!config/meshfan.example.json
+
+# Private key material (prefer the MESHFAN_PRIVATE_KEY env var; if a file, keep it here)
+keys/
+*.key
+*.pem
+*.p12
+*.der
+id_ed25519*
+
+# Environment files
+.env
+.env.*
+!.env.example
+
+# === Python ===
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.eggs/
+build/
+dist/
+.venv/
+venv/
+env/
+
+# === Testing / coverage / linting ===
+.pytest_cache/
+.coverage
+coverage.xml
+htmlcov/
+.tox/
+.mypy_cache/
+.ruff_cache/
+
+# === IDE / editor ===
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# === OS ===
+.DS_Store
+Thumbs.db
+
+# === Runtime state / logs ===
+*.log
+logs/
+*.pid
+*.sock
+state/
