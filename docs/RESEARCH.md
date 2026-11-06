@@ -85,11 +85,26 @@ PyPI package (declared in meshcoretomqtt's pyproject.toml). It signs from the
 scalar, so it works with the MeshCore key format. It is a C library (zlib
 license, SUPERCOP ref10 based, 578 stars) with a Python binding.
 
-Deployment note: `ed25519_orlp` "may require a C toolchain and Python headers
-on Linux if a pre-compiled wheel is unavailable." On the Pi (PXEpi, buster,
-32-bit armv7l) there may be no prebuilt wheel, so it would compile from
-source (needs gcc plus python3-dev). This is a deployment consideration, not a
-blocker.
+Confirmed API (read from the 0.1.3 sdist, `src/ed25519_orlp/ed25519.py`):
+
+```python
+ed25519_sign(message: bytes, pubkey: bytes, prvkey: bytes) -> bytes  # 64-byte sig
+ed25519_verify(signature: bytes, message: bytes, pubkey: bytes) -> bool
+ed25519_create_keypair(seed=None) -> (pub, prv, seed)
+```
+
+Note `ed25519_sign` takes BOTH the public and private key. It is a ctypes
+wrapper that loads a pre-compiled shared library (`libed25519.so` / `.dylib`).
+
+Deployment note (confirmed from the sdist `setup.py` and the 0.1.3 release):
+the 0.1.3 release only published wheels for macOS arm64 and x86_64 Linux
+(manylinux + musl). There is NO armv7l wheel, even though the author's
+cibuildwheel config lists armv7l targets. So on the Pi (PXEpi, buster,
+armv7l) the sdist must be built. `setup.py` compiles the C source via a plain
+setuptools `Extension` (no Python C API linkage), so it needs a C compiler
+(gcc). python3-dev is not strictly required because there is no Python C API,
+but a normal `apt install build-essential` covers it. This is a deployment
+consideration, not a blocker. Verify on the Pi before relying on it.
 
 ## 5. Architecture prior art (meshcoretomqtt)
 
@@ -111,8 +126,8 @@ WSS connection, publishes, renews before exp, and reconnects with backoff.
 ## 6. Dependencies (only what is beneficial)
 
 - `ed25519_orlp` (signing. The exact reference library.)
-- `paho-mqtt` (MQTT client. Plain TCP source plus WS targets.)
-- `websocket-client` (WS transport backend for paho-mqtt.)
+- `paho-mqtt` (MQTT client. Plain TCP source plus WS targets; 2.x has
+its own WebSocket transport, so `websocket-client` is not needed.)
 - `PyYAML` (config file.)
 
 Dropped: `cryptography` (cannot sign the MeshCore key format. See section 4.)
@@ -129,24 +144,49 @@ Done:
 - [x] Key format discovery (section 4).
 - [x] Signing library decision: ed25519_orlp.
 - [x] Logging requirement: stdout only by default. Optional file or syslog.
+- [x] Core code (config, key, jwt, source, sink, fanout, log, __main__).
+- [x] JWT signing verified (round-trip sign/verify, tamper rejected, renewal window).
+- [x] config/meshfan.example.yaml.
+- [x] No-static-content pass (client_id, keepalive, max_queued_messages,
+  shutdown_timeout, username_prefix all configurable).
+- [x] Efficiency review (free model): 4 major + 4 minor findings, all fixed
+  (shutdown stall, backoff OverflowError, publish race, jitter validation,
+  SSL-context caching, off-by-one, source stop order).
+
+In progress (delegated to subagents):
+
+- [ ] Security review (free model): 8 major + 16 minor findings. Being applied
+  by a subagent, together with the age-encrypted key feature.
+- [ ] age-encrypted key file support + `meshfan key encrypt` helper (decided:
+  age-sctl, passphrase from an env var, never on the command line).
+
+Reusability / API review: first pass done (13 major, 20 minor; report in
+docs/REVIEW-reusability-api.md). It ran on a non-preferred model and against a
+moving tree (security edits landed mid-review), so it will be re-run on
+deepseek-v4.1-flash-free once the security+age task completes and the tree
+settles at a commit. Key recurring themes (several overlap with the security
+findings already being applied): no tests (incl. the mandated JWT known-answer
+test), no README, no public API surface / exception hierarchy, no client-factory
+test seam, file-only config loading, unknown keys silently ignored, ValueError
+tracebacks instead of ConfigError, unenforced chmod-600 claim, dependencies not
+split, jwt.py missing length validation and a verify() helper.
 
 Not done:
 
-- [ ] Core code (config, key, jwt_sign, source, sink, fanout, log, __main__).
 - [ ] Tests (JWT signing vs reference, config validation, key loading).
-- [ ] config/meshfan.example.yaml.
 - [ ] docs/ARCHITECTURE.md, docs/SECURITY.md, docs/CONFIGURATION.md,
   docs/DEPLOYMENT.md.
 - [ ] README.md, CHANGELOG.md, CONTRIBUTING.md, SECURITY.md.
-- [ ] contrib/systemd/meshfan.service.
+- [ ] contrib/systemd/meshfan.service (must set LimitCORE=0 per the security
+  review).
 - [ ] .github/workflows/ci.yml.
-- [ ] Peer review (architecture, security, docs) via approved free models.
 - [ ] Release artifacts (version, tags, release notes).
 
 ## 8. Open questions and roadblocks
 
-- Verify `ed25519_orlp` installs on the Pi (buster, 32-bit). It may need a C
-  toolchain. Confirm before relying on it.
+- Verify `ed25519_orlp` installs on the Pi (buster, armv7l). Confirmed: no
+  armv7l wheel in 0.1.3, so the sdist must be built (needs a C compiler, gcc).
+  Confirm the build works before relying on it.
 - Confirm the exact `aud` and `path` for each target broker from the broker's
   docs (MeshOMatic: aud `map.meshomatic.net`, path `/mqtt`).
 - Confirm whether the `client` claim is required by each broker (optional in the

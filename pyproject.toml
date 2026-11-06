@@ -36,9 +36,8 @@ classifiers = [
 ]
 # Only dependencies that are directly beneficial to the goal.
 dependencies = [
-    "paho-mqtt>=2.1,<3",        # MQTT client (plain TCP + WebSocket transport)
-    "websocket-client>=1.8",    # WebSocket transport backend required by paho-mqtt
-    "cryptography>=42.0",       # Ed25519 signing (the standard, well-audited library)
+    "paho-mqtt>=2.1,<3",        # MQTT client (plain TCP + its own WebSocket transport)
+    "ed25519-orlp~=0.1.3",      # Ed25519 signing (the exact reference library; pins 0.1.x)
     "PyYAML>=6.0",             # human-readable config files
 ]
 

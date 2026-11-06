@@ -76,11 +76,12 @@ One process, one config file, N brokers. That is the whole product.
 - Source: a single MQTT subscription (paho-mqtt, plain TCP or TLS).
 - Fan-out: an in-memory message bus. Each message goes to every target.
 - Sinks: one per target broker. Each sink signs a fresh JWT (Ed25519) with
-  the target's audience, opens a WSS connection (paho-mqtt plus
-  websocket-client, TLS verified), publishes the message, renews the JWT
+  the target's audience, opens a WSS connection (paho-mqtt's built-in WebSocket
+  transport, TLS verified), publishes the message, renews the JWT
   before `exp`, and reconnects with exponential backoff plus jitter.
-- Key store: the Ed25519 private key is loaded once (env var or a chmod 600
-  file), held in memory, and never written to logs or disk.
+- Key store: the Ed25519 private key is loaded once (env var, a chmod 600
+  file, or an age-encrypted file), held in memory, and never written to
+  logs or disk.
 
 ## Configuration (one file)
 
@@ -98,9 +99,10 @@ reconnect policy, and debug flags. Design rules:
 
 ## Security model
 
-- Key handling: the private key is loaded from an env var (preferred) or a
-  chmod 600 file, held in memory only, and never logged, written to disk, or
-  included in crash dumps.
+- Key handling: the private key is loaded from an env var (preferred), a
+  chmod 600 file, or an age-encrypted file, held in memory only, and never
+  logged, written to disk, or included in crash dumps (RLIMIT_CORE=0, and
+  the systemd unit must set LimitCORE=0).
 - TLS: certificate verification is on by default. Skipping it requires an
   explicit `tls.insecure: true`, which logs a loud warning.
 - No secret logging: the private key, the full JWT, and the password are
