@@ -16,8 +16,8 @@ gap meshfan fills.
 
 ## Why meshfan exists
 
-MeshCore observer firmware has a hardware limit on the number of MQTT
-connections (slots) it can hold. Reaching a WSS broker such as
+On some hardware radios, MeshCore observer firmware has a limit on the
+number of MQTT connections (slots) it can hold. Reaching a WSS broker such as
 MeshOMatic directly from the observer would consume one of those limited
 slots.
 
