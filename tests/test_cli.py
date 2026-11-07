@@ -9,12 +9,11 @@ import os
 import stat
 
 import pytest
-
-from meshfan.cli import main, _load_example_config
-from meshfan.config import loads
-from meshfan import verify
-
 from helpers import valid_config_dict, write_yaml
+
+from meshfan import verify
+from meshfan.cli import _load_example_config, main
+from meshfan.config import loads
 
 
 def test_check_ok(tmp_path, keypair, monkeypatch, capsys):

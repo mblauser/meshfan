@@ -4,12 +4,11 @@ from __future__ import annotations
 import dataclasses
 
 import pytest
+from helpers import valid_config_dict
 
 from meshfan import KeyLoadError, from_dict
 from meshfan.app import MeshfanApp, prepare
 from meshfan.errors import MeshfanError
-
-from helpers import valid_config_dict
 
 
 def test_frozen_config_rejects_mutation():

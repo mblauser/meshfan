@@ -32,7 +32,8 @@ import os
 import re
 import socket
 import stat
-from typing import Any, Mapping
+from collections.abc import Mapping
+from typing import Any
 
 from .errors import MeshfanError
 
@@ -759,7 +760,7 @@ def load(path: str) -> Config:
         )
 
     try:
-        with open(path, "r", encoding="utf-8") as f:
+        with open(path, encoding="utf-8") as f:
             text = f.read()
     except FileNotFoundError as e:
         raise ConfigError(f"config file not found: {path}") from e

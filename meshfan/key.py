@@ -27,7 +27,7 @@ import os
 import stat
 import subprocess
 import tempfile
-from typing import Mapping
+from collections.abc import Mapping
 
 from ed25519_orlp import ed25519_sign, ed25519_verify
 
@@ -158,8 +158,7 @@ def _run_age(args: list[str], timeout: float, secret: str | None = None) -> byte
         proc = subprocess.run(
             args,
             stdin=subprocess.DEVNULL,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
+            capture_output=True,
             timeout=timeout,
             check=False,
         )

@@ -10,6 +10,7 @@ import os
 import re
 
 import pytest
+from helpers import valid_config_dict
 
 from meshfan import (
     ConfigError,
@@ -19,8 +20,6 @@ from meshfan import (
     loads,
 )
 from meshfan.config import default_client_id
-
-from helpers import valid_config_dict
 
 PUB = "00" * 32
 
@@ -136,9 +135,8 @@ def test_load_file_not_found(tmp_path):
 
 
 def test_load_mode_warning(tmp_path):
-    from helpers import valid_config_dict
-
     import yaml
+    from helpers import valid_config_dict
 
     p = tmp_path / "m.yaml"
     p.write_text(yaml.safe_dump(valid_config_dict(PUB)))

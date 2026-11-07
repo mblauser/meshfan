@@ -28,13 +28,12 @@ import os
 import signal
 import threading
 import time
-from typing import Mapping
+from collections.abc import Mapping
 
 from .config import Config, default_client_id
 from .errors import MeshfanError
 from .fanout import Fanout
 from .key import (
-    KeyLoadError,
     load_private_key,
     load_public_key,
     load_secret,
