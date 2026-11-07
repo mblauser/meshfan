@@ -153,18 +153,45 @@ Done:
   (shutdown stall, backoff OverflowError, publish race, jitter validation,
   SSL-context caching, off-by-one, source stop order).
 
+Done (delegated to subagents, committed at 61cc651):
+
+- [x] Security review (free model): 8 major + 16 minor findings, all applied
+  (strict booleans, key whitelists, numeric ranges, plaintext opt-in, publish
+  race, backoff cap, live-connection token renewal, graceful shutdown, key-file
+  permission check, RLIMIT_CORE=0, keypair probe in --check, log sanitation).
+- [x] age-encrypted key file support + `meshfan key encrypt` helper (age-sctl,
+  passphrase via a 0600 temp file, never in argv).
+
+Follow-ups from the security+age task:
+- age-sctl CLI is unverified (not installed on the dev machine); the contract
+  is isolated in key.py:_age_argv for a one-line fix. Verify against the real
+  tool before release.
+- ed25519-orlp 0.1.3 fails to import on Python 3.9 (PEP 604); floor
+  requires-python to >=3.10.
+
+Done (delegated to subagents):
+
+- [x] Reusability / API review re-run on deepseek-v4.1-flash-free against the
+  settled tree (commit 61cc651). 17 major + 11 minor findings; report in
+  docs/REVIEW-reusability-api-61cc651.md. Notable new findings: main()
+  irreversibly zeroes the host core-dump hard limit even on --check; the
+  config object stores and reprs the resolved password (secret leak); pip
+  install is not runnable (CWD-relative config, nothing shipped); key loading
+  is non-idempotent (env pop).
+
 In progress (delegated to subagents):
 
-- [ ] Security review (free model): 8 major + 16 minor findings. Being applied
-  by a subagent, together with the age-encrypted key feature.
-- [ ] age-encrypted key file support + `meshfan key encrypt` helper (decided:
-  age-sctl, passphrase from an env var, never on the command line).
+- [ ] Apply the reusability review (top-5: public surface + MeshfanError,
+  secret handling / ResolvedSecrets + frozen config, test seam + JWT
+  known-answer test, MeshfanApp/run() with no process-global side effects,
+  second-user packaging + README + CI). NOTE: the free-model daily quota was
+  exhausted mid-dispatch, so this pass is running on the current model
+  (Qwen3.8-27B on Neuronic). A first attempt left partial changes; the tree
+  was reverted to the clean 61cc651 state before re-dispatch.
 
-Reusability / API review: first pass done (13 major, 20 minor; report in
-docs/REVIEW-reusability-api.md). It ran on a non-preferred model and against a
-moving tree (security edits landed mid-review), so it will be re-run on
-deepseek-v4.1-flash-free once the security+age task completes and the tree
-settles at a commit. Key recurring themes (several overlap with the security
+(First-pass reusability review, 13 major + 20 minor, is in
+docs/REVIEW-reusability-api.md; it ran on a moving tree and a non-preferred
+model, so the 61cc651 re-run above supersedes it. Key recurring themes (several overlap with the security
 findings already being applied): no tests (incl. the mandated JWT known-answer
 test), no README, no public API surface / exception hierarchy, no client-factory
 test seam, file-only config loading, unknown keys silently ignored, ValueError
