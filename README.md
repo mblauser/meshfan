@@ -13,6 +13,19 @@ sign that JWT itself, which is the gap meshfan fills.
 > serialized with no whitespace. Match these exactly or the broker
 > rejects the token. See [docs/JWT.md](docs/JWT.md).
 
+## Why meshfan exists
+
+MeshCore observer firmware has a hardware limit on the number of MQTT
+connections (slots) it can hold. Reaching a WSS broker such as
+MeshOMatic directly from the observer would consume one of those limited
+slots.
+
+meshfan runs on a separate host (for example a Raspberry Pi). It
+subscribes to the local MQTT source and republishes the messages to the
+WSS brokers, signing the device JWT itself. Because the WSS connections
+are held by meshfan on the separate host, the observer firmware's
+limited MQTT slots stay free for what the firmware needs them for.
+
 ## Install
 
 ```sh
