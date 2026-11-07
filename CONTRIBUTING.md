@@ -37,6 +37,10 @@ The test suite is network-isolated: no test needs a broker (the
   git-ignored; only `*.example.*` files are committed.
 - **New code gets tests.** Match the existing style: no network, no
   real time, injected seams.
+- **Dependency changes update the locks.** If you change a constraint
+  in `pyproject.toml`, also update `requirements.in` /
+  `requirements-dev.in` and regenerate the locks (`pip-compile`, see
+  the README). CI fails if the locks are stale.
 
 ## Pull requests
 

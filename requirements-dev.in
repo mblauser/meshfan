@@ -1,0 +1,11 @@
+# Development dependencies: the full runtime plus the dev tools.
+#
+# Mirrors pyproject.toml [project] dependencies plus the [dev] extra.
+# Keep in sync with pyproject.toml.
+#
+# Regenerate the lock:
+#   pip-compile requirements-dev.in -o requirements-dev.lock
+-r requirements.in
+pytest>=8.0
+ruff>=0.4
+mypy>=1.10

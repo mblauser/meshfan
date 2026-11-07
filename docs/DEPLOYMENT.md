@@ -23,6 +23,13 @@ python3 -m venv /opt/meshfan/venv
 `[full]` is the daemon (paho-mqtt) plus YAML config parsing (PyYAML).
 The pure signer needs only `meshfan` (ed25519-orlp).
 
+For a pinned, reproducible install (the exact versions are in
+`requirements.lock`), install from the lock instead:
+
+```sh
+/opt/meshfan/venv/bin/pip install -r requirements.lock
+```
+
 ## Set up
 
 1. Create a starter config (mode 0600):
