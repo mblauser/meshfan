@@ -223,16 +223,21 @@ Not done:
   and there is no public `age-sctl` repository, so it cannot be verified
   from here. The contract is isolated in `key.py:_age_argv` (a one-line
   fix) and a verification snippet is in docs/DEPLOYMENT.md.
-- [x] PXEpi deploy (complete and verified). CPython 3.11.9 built into
-  `/opt/python3.11` (system `python3.7` untouched); `meshfan` system
-  user; venv at `/opt/meshfan/venv`; `meshfan[full]` installed from
-  `requirements.lock` (ed25519-orlp from the piwheels armv7l wheel, no
-  sdist build); config + 0600 `EnvironmentFile` (env-var key); `--check`
-  passed (keypair verified); systemd unit enabled and running; source
-  connected and the MeshOMatic sink connected (signed JWT accepted by the
-  broker); stable with no reconnects. Back-out: `systemctl disable --now
-  meshfan`, remove `/opt/meshfan`, `/opt/python3.11`, `/etc/meshfan`,
-  the `meshfan` user, and `libffi-dev`.
+- [x] PXEpi deploy (complete, verified, end-to-end confirmed). CPython
+  3.11.9 built into `/opt/python3.11` (system `python3.7` untouched);
+  `meshfan` system user; venv at `/opt/meshfan/venv`; `meshfan[full]`
+  installed from `requirements.lock` (ed25519-orlp from the piwheels
+  armv7l wheel, no sdist build); config + 0600 `EnvironmentFile`
+  (env-var key); `--check` passed (keypair verified); systemd unit
+  enabled and running; source connected and the MeshOMatic sink
+  connected (signed JWT accepted by the broker); stable with no
+  reconnects. **End-to-end confirmed:** a real advert published to the
+  local relay was relayed to MeshOMatic and appeared on the MeshOMatic
+  map (the sink log shows published messages accumulating,
+  `connected=True`). Build artifacts cleaned up (306 MB freed). Back-out:
+  `systemctl disable --now meshfan`, remove `/opt/meshfan`,
+  `/opt/python3.11`, `/etc/meshfan`, the `meshfan` user, and
+  `libffi-dev`.
 
 ## 8. Open questions and roadblocks
 
