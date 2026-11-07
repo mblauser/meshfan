@@ -220,3 +220,14 @@ meshfan.MeshfanError        # base class for ConfigError / KeyLoadError
 - [docs/CONFIGURATION.md](docs/CONFIGURATION.md): every key, default, and range
 - [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md): install, systemd, PXEpi, age-sctl
 - [docs/RESEARCH.md](docs/RESEARCH.md): research record
+
+## Roadmap
+
+- **Username/password brokers (plain TCP).** The sink currently targets
+  MeshCore device-signing WSS brokers. A future release will add
+  `transport: tcp` and optional `username`/`password` auth (via
+  `password_env`/`password_file`, reusing the source's secret handling)
+  so meshfan can also relay to plain MQTT brokers that use
+  username/password authentication, for example NashMesh
+  (`mqtt.nashme.sh:1883`, user `meshdev`). The device-signing path
+  stays the default and is unchanged.

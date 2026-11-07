@@ -266,3 +266,17 @@ Not done:
 - Live test: publish a test message to the source. Confirm it arrives at each
   target (no auth rejection).
 - Grep the logs for the key and the JWT. Confirm no secret leaks.
+
+## 10. Future scope
+
+- **Username/password brokers (plain TCP) for the sink.** The sink is
+  currently hardcoded for MeshCore device-signing WSS brokers (transport
+  is always `websockets`, auth is always the device JWT, and a WebSocket
+  `path` is always set; see sink.py). Brokers that use username/password
+  auth over plain TCP, for example NashMesh (`mqtt.nashme.sh:1883`, user
+  `meshdev`, password auth, no TLS/WebSocket), cannot be reached as-is.
+  Future work: add `transport: tcp` and optional `username`/`password`
+  (via `password_env`/`password_file`, reusing the source's secret
+  handling) to the sink, alongside the device-signing path (which stays
+  the default and is unchanged). Recorded as future scope per the user's
+  decision (2026-11-07); not built yet.
