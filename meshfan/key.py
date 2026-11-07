@@ -1,8 +1,8 @@
 """Load and validate the Ed25519 key material.
 
 The private key is a secret. It is loaded from an environment variable
-(preferred) or a chmod-600 regular file, validated, and held in memory only.
-The raw string is dropped after conversion to bytes.
+(preferred) or a chmod-600 regular file, validated, and held in memory
+only. The raw string is dropped after conversion to bytes.
 
 The file may be age-encrypted (key.encryption: age). In that case the
 passphrase comes from the environment variable named by
@@ -10,49 +10,60 @@ key.passphrase_env, is handed to `age-sctl` through a short-lived 0600
 passphrase file (never on the command line), and is never logged.
 
 The public key is not a secret. It is a 64-hex string in the config.
+
+The pure hex validation/decoding lives in meshfan.jwt
+(parse_private_key / parse_public_key), which has no I/O and no YAML
+dependency; this module keeps the I/O wrappers.
+
+Loading is idempotent by default for library callers: pass
+``consume=False`` (and, for a retry-safe env, your own mapping) to keep
+the variable set. The daemon (meshfan.cli) passes the defaults, which
+pop the variable from os.environ after reading it.
 """
 from __future__ import annotations
 
 import contextlib
 import os
-import re
 import stat
 import subprocess
 import tempfile
+from typing import Mapping
 
 from ed25519_orlp import ed25519_sign, ed25519_verify
 
 from .config import KeyConfig
+from .errors import MeshfanError
+from .jwt import parse_private_key, parse_public_key
 from .log import sanitize
-
-_HEX64 = re.compile(r"^[0-9A-Fa-f]{64}$")
-_HEX128 = re.compile(r"^[0-9A-Fa-f]{128}$")
 
 #: Fixed probe signed to prove the configured public key matches the private.
 KEYPAIR_PROBE = b"meshfan keypair probe v1"
 
 
-class KeyLoadError(Exception):
+class KeyLoadError(MeshfanError):
     """Raised when key material is missing or malformed."""
 
 
-def _clean(value: str) -> str:
-    """Strip whitespace (including newlines) from a hex string."""
-    return "".join(value.split())
+def _read_env(
+    name: str, what: str, env: Mapping[str, str], consume: bool
+) -> str:
+    """Read a secret from `env`.
 
-
-def _read_env(name: str, what: str) -> str:
-    """Read a secret from the environment and remove it from the environment.
-
-    Popping it means a later crash dump, /proc/<pid>/environ read, or child
+    With consume=True the variable is removed from the environment after
+    reading (only for mappings that support pop, i.e. os.environ or a
+    dict), so a later crash dump, /proc/<pid>/environ read, or child
     process cannot pick the secret up. Prefer a systemd EnvironmentFile
     (mode 0600) over `Environment=` in the unit file.
     """
-    value = os.environ.pop(name, None)
+    value = env.get(name)
     if value is None:
         raise KeyLoadError(f"environment variable {name} is not set ({what})")
     if value == "":
         raise KeyLoadError(f"environment variable {name} is empty ({what})")
+    if consume:
+        pop = getattr(env, "pop", None)
+        if pop is not None:
+            pop(name, None)
     return value
 
 
@@ -202,38 +213,50 @@ def _age_decrypt(cfg: KeyConfig, passphrase: str) -> str:
         raise KeyLoadError("age decrypted data is not text") from e
 
 
-def load_private_key(cfg: KeyConfig) -> bytes:
+def load_private_key(
+    cfg: KeyConfig,
+    *,
+    env: Mapping[str, str] = os.environ,
+    consume: bool = True,
+) -> bytes:
     """Load the 64-byte private key (128 hex chars, MeshCore expanded form).
 
     With key.encryption=age the file is decrypted first. Only the bytes are
     returned; the plaintext string is dropped.
+
+    Args:
+        cfg: the key section of the config.
+        env: the mapping to read env-var secrets from (default: os.environ).
+        consume: remove the read variable from `env` afterwards (default:
+            True, the daemon behavior). Pass consume=False for idempotent
+            library use (reload, retry, two relays in one process).
     """
     if cfg.encryption == "age":
         if not cfg.private_key_file:
             raise KeyLoadError("key.encryption=age requires private_key_file")
         if not cfg.passphrase_env:
             raise KeyLoadError("key.encryption=age requires passphrase_env")
-        passphrase = _read_env(cfg.passphrase_env, "age passphrase")
+        passphrase = _read_env(cfg.passphrase_env, "age passphrase", env, consume)
         raw = _age_decrypt(cfg, passphrase)
     elif cfg.private_key_env:
-        raw = _read_env(cfg.private_key_env, "private key")
+        raw = _read_env(cfg.private_key_env, "private key", env, consume)
     elif cfg.private_key_file:
         raw = _read_file_secure(cfg.private_key_file)
     else:
         raise KeyLoadError("no key source: set an env var name or a file path")
 
-    raw = _clean(raw)
-    if not _HEX128.match(raw):
-        raise KeyLoadError("private key must be 128 hex characters (64 bytes)")
-    return bytes.fromhex(raw)
+    try:
+        return parse_private_key(raw)
+    except ValueError as e:
+        raise KeyLoadError(str(e)) from e
 
 
 def load_public_key(hex_str: str) -> bytes:
     """Load and validate the 32-byte public key (64 hex chars)."""
-    raw = _clean(hex_str)
-    if not _HEX64.match(raw):
-        raise KeyLoadError("public key must be 64 hex characters (32 bytes)")
-    return bytes.fromhex(raw)
+    try:
+        return parse_public_key(hex_str)
+    except ValueError as e:
+        raise KeyLoadError(str(e)) from e
 
 
 def load_secret(
@@ -241,15 +264,18 @@ def load_secret(
     file_path: str | None,
     inline: str | None,
     what: str,
+    *,
+    env: Mapping[str, str] = os.environ,
+    consume: bool = True,
 ) -> str | None:
     """Resolve an optional secret from env (preferred), file, or inline.
 
-    The env var is removed from the environment after reading. Inline is
-    accepted for compatibility but the caller should warn that it is
-    deprecated.
+    With consume=True the env var is removed from the environment after
+    reading. Inline is accepted for compatibility but the caller should
+    warn that it is deprecated.
     """
     if env_name:
-        return _read_env(env_name, what)
+        return _read_env(env_name, what, env, consume)
     if file_path:
         return _clean_secret(_read_file_secure(file_path))
     if inline is not None:
@@ -294,11 +320,11 @@ def encrypt_key_file(
             f"output file already exists: {out_path} (use --force to replace)"
         )
 
-    raw = _clean(_read_file_secure(in_path))
-    if not _HEX128.match(raw):
-        raise KeyLoadError(
-            f"{in_path}: private key must be 128 hex characters (64 bytes)"
-        )
+    raw = _read_file_secure(in_path)
+    try:
+        parse_private_key(raw)
+    except ValueError as e:
+        raise KeyLoadError(f"{in_path}: {e}") from e
 
     with _passphrase_file(passphrase) as pass_file:
         ciphertext = _run_age(

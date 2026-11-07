@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import logging
+from typing import Protocol, runtime_checkable
 
 from .config import DebugConfig
 from .log import sanitize
@@ -9,8 +10,17 @@ from .log import sanitize
 log = logging.getLogger("meshfan.fanout")
 
 
+@runtime_checkable
+class SinkLike(Protocol):
+    """The sink contract Fanout needs: publish + a name for logging."""
+
+    broker: object
+
+    def publish(self, topic: str, payload: bytes, qos: int = 0) -> bool: ...
+
+
 class Fanout:
-    def __init__(self, sinks: list, debug: DebugConfig) -> None:
+    def __init__(self, sinks: list[SinkLike], debug: DebugConfig) -> None:
         self.sinks = sinks
         self.debug = debug
         self.delivered = 0

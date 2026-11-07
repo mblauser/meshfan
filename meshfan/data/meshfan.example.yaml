@@ -1,0 +1,101 @@
+# meshfan example configuration.
+#
+# Copy this to config/meshfan.yaml and fill in real values. The real config
+# is gitignored; only this example (placeholders only) is committed.
+#
+# Secrets (the private key) are referenced by env-var name or file path,
+# never inlined. The config file itself may contain hostnames and
+# credentials, so keep it at mode 0600/0640 (meshfan warns if it is wider).
+#
+# Unknown keys are rejected: a typo is a config error, never silently ignored.
+
+source:
+  host: 127.0.0.1
+  port: 1883
+  topic: "meshcore/#"
+  # username: ""        # optional, if the source broker requires it
+  # Password, in order of preference (use only one):
+  # password_env: MESHFAN_SOURCE_PASSWORD
+  # password_file: /etc/meshfan/source.pass   # must be mode 0600
+  # password: ""        # DEPRECATED: inline secret, kept for compatibility
+  # client_id: meshfan-source  # default: meshfan-<hostname>-<pid>, resolved at
+                              # startup (the config stays deterministic)
+  keepalive: 30               # seconds between keepalive pings
+  qos: 0                      # subscription QoS (0 | 1 | 2)
+  tls:
+    enabled: false      # the local relay is plain TCP
+    plaintext: true     # second explicit opt-in required when enabled is false
+    insecure: false
+    # ca_file: ""
+
+key:
+  # Preferred (plain hex key): name of the env var holding the 128-hex
+  # private key. meshfan removes the variable from its environment after
+  # reading it. Prefer a systemd EnvironmentFile (mode 0600) over Environment=.
+  private_key_env: MESHFAN_PRIVATE_KEY
+  # Alternative: a mode-0600 regular file holding the 128-hex private key
+  # (symlinks and wider modes are refused).
+  # private_key_file: /etc/meshfan/key
+  #
+  # Age-encrypted key file. With encryption: age, private_key_file is the
+  # encrypted file and the passphrase is read from passphrase_env, then
+  # handed to `age-sctl` through a 0600 passphrase file (never argv).
+  # Create it with:
+  #   meshfan key encrypt --in key.plain --out key.age --passphrase-env MESHFAN_AGE_PASSPHRASE
+  # encryption: none          # none | age
+  # passphrase_env: MESHFAN_AGE_PASSPHRASE
+  # age_command: age-sctl     # the age CLI to run (configurable for wrappers)
+  # age_timeout_seconds: 30
+  #
+  # The 64-hex public key (not a secret). It MUST match the private key;
+  # startup and --check sign a fixed probe and verify it. Uppercase or
+  # lowercase both work.
+  public_key: "0000000000000000000000000000000000000000000000000000000000000000"
+
+# An enumerated list of target brokers. Add or remove a broker by adding or
+# removing a list item.
+brokers:
+  - name: meshomatic
+    host: us-east.meshomatic.net
+    port: 443
+    path: /mqtt                 # broker-specific WebSocket path (strict)
+    audience: map.meshomatic.net  # broker-specific JWT `aud`
+    # client: meshfan-meshomatic  # the MQTT client id (`client` claim);
+                                # default: meshfan-<name>; make it unique if
+                                # two relays share this broker
+    keepalive: 30
+    tls:
+      enabled: true
+      # plaintext: false       # only valid with enabled: false (loud warning)
+      insecure: false         # true disables certificate verification (loud warning)
+      # ca_file: ""
+
+# token:
+#   ttl_seconds: 3600           # 1..86400
+#   renew_before_seconds: 360   # 0 <= renew_before < ttl; reconnect happens here
+
+# reconnect:
+#   base_delay: 1.0
+#   max_delay: 60.0
+#   multiplier: 2.0       # >= 1.0
+#   jitter: 0.5           # 0.0 <= jitter < 1.0
+
+# runtime:
+#   max_queued_messages: 1000      # per-sink outgoing queue cap (0 = unlimited)
+#   shutdown_timeout: 5.0          # seconds to wait for a sink to stop
+#   username_prefix: "v1_"         # the device-signing username prefix
+#   token_check_seconds: 30        # live-connection token/renewal check period
+#   connect_timeout_seconds: 10    # TCP connect + CONNACK deadline per attempt
+#   summary_interval_seconds: 300  # per-sink published/dropped summary; 0 = off
+
+# logging:
+#   level: INFO                # DEBUG | INFO | WARNING | ERROR | CRITICAL
+#   output: stdout            # stdout | file | syslog
+#   # file_path: /var/log/meshfan.log   # required when output is file; mode 0600
+#   max_bytes: 10485760       # rotate at 10 MiB
+#   backup_count: 5
+
+# debug:
+#   messages: false           # log each dispatched topic (not payloads)
+#   tokens: false             # log token renewal events (no secrets)
+#   paho: false               # let paho log at DEBUG (very noisy)

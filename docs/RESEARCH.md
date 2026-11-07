@@ -179,15 +179,20 @@ Done (delegated to subagents):
   install is not runnable (CWD-relative config, nothing shipped); key loading
   is non-idempotent (env pop).
 
-In progress (delegated to subagents):
+Done (delegated to subagents):
 
-- [ ] Apply the reusability review (top-5: public surface + MeshfanError,
-  secret handling / ResolvedSecrets + frozen config, test seam + JWT
-  known-answer test, MeshfanApp/run() with no process-global side effects,
-  second-user packaging + README + CI). NOTE: the free-model daily quota was
-  exhausted mid-dispatch, so this pass is running on the current model
-  (Qwen3.8-27B on Neuronic). A first attempt left partial changes; the tree
-  was reverted to the clean 61cc651 state before re-dispatch.
+- [x] Apply the reusability review (top-5). NOTE: the free-model daily quota
+  was exhausted mid-dispatch, so this pass ran on the current model
+  (Qwen3.8-27B on Neuronic); a first attempt left partial changes and the
+  tree was reverted to the clean 61cc651 state before re-dispatch. Result:
+  public surface (__all__ + re-exports, errors.py MeshfanError, py.typed,
+  lazy YAML, loads/from_dict), secret handling (frozen Config, repr=False,
+  ResolvedSecrets, idempotent key loaders), test seam (MqttClient Protocol,
+  client_factory, injected clocks/RNG), 155 passing tests (incl. the JWT
+  known-answer test), MeshfanApp/run() with no process-global side effects
+  (RLIMIT/signals/logging in cli.py), packaging (dep split, single-source
+  version, SPDX MIT, README, --init-config, jwt sign, key generate, CI
+  matrix 3.10-3.14, requires-python >=3.10).
 
 (First-pass reusability review, 13 major + 20 minor, is in
 docs/REVIEW-reusability-api.md; it ran on a moving tree and a non-preferred

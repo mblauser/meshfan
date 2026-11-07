@@ -18,7 +18,8 @@ source:
   # password_env: MESHFAN_SOURCE_PASSWORD
   # password_file: /etc/meshfan/source.pass   # must be mode 0600
   # password: ""        # DEPRECATED: inline secret, kept for compatibility
-  # client_id: meshfan-source  # default: meshfan-<hostname>-<pid> (unique)
+  # client_id: meshfan-source  # default: meshfan-<hostname>-<pid>, resolved at
+                              # startup (the config stays deterministic)
   keepalive: 30               # seconds between keepalive pings
   qos: 0                      # subscription QoS (0 | 1 | 2)
   tls:
@@ -59,8 +60,9 @@ brokers:
     port: 443
     path: /mqtt                 # broker-specific WebSocket path (strict)
     audience: map.meshomatic.net  # broker-specific JWT `aud`
-    client: meshfan             # the MQTT client id (`client` claim); make it
-                                # unique if two relays share this broker
+    # client: meshfan-meshomatic  # the MQTT client id (`client` claim);
+                                # default: meshfan-<name>; make it unique if
+                                # two relays share this broker
     keepalive: 30
     tls:
       enabled: true

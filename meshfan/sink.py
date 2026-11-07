@@ -16,17 +16,21 @@ import ssl
 import threading
 import time
 
+from typing import Callable
+
 import paho.mqtt.client as mqtt
 
 from . import jwt as jwtmod
 from .config import (
     BrokerConfig,
+    ConfigError,
     DebugConfig,
     ReconnectConfig,
     RuntimeConfig,
     TokenConfig,
 )
 from .log import sanitize
+from .transport import MqttClient, MqttClientFactory
 
 log = logging.getLogger("meshfan.sink")
 
@@ -45,6 +49,11 @@ class Sink:
         runtime: RuntimeConfig,
         debug: DebugConfig,
         ssl_ctx: ssl.SSLContext | None,
+        *,
+        client_factory: MqttClientFactory | None = None,
+        wall_clock: Callable[[], int] | None = None,
+        mono_clock: Callable[[], float] | None = None,
+        rng: random.Random | None = None,
     ) -> None:
         self.broker = broker
         self.public_key = public_key
@@ -54,18 +63,29 @@ class Sink:
         self.runtime = runtime
         self.debug = debug
         if broker.tls.enabled and ssl_ctx is None:
-            raise ValueError(
+            raise ConfigError(
                 f"{broker.name}: TLS is enabled but no SSL context was supplied"
             )
         if not broker.tls.enabled and ssl_ctx is not None:
-            raise ValueError(
+            raise ConfigError(
                 f"{broker.name}: TLS is disabled but an SSL context was supplied"
             )
         self._ssl_ctx = ssl_ctx
 
+        # Test seams: injectable clocks and RNG so renewal and backoff are
+        # deterministically testable without sleeping or monkeypatching.
+        self._client_factory = (
+            client_factory if client_factory is not None else self._make_paho_client
+        )
+        self._wall_clock = wall_clock if wall_clock is not None else (
+            lambda: int(time.time())
+        )
+        self._mono_clock = mono_clock if mono_clock is not None else time.monotonic
+        self._rng = rng if rng is not None else random.Random()
+
         self._token: jwtmod.Token | None = None
-        self._renew_at: float | None = None  # time.monotonic() deadline
-        self._client: mqtt.Client | None = None
+        self._renew_at: float | None = None  # mono_clock() deadline
+        self._client: MqttClient | None = None
         self._client_lock = threading.Lock()
         self._thread: threading.Thread | None = None
         self._stop = threading.Event()
@@ -77,7 +97,7 @@ class Sink:
         self.published = 0
         self.dropped = 0
         self._drop_warned = False
-        self._last_summary = time.monotonic()
+        self._last_summary = self._mono_clock()
         self._published_mark = 0
         self._dropped_mark = 0
 
@@ -85,18 +105,18 @@ class Sink:
 
     # -- token management --
     def _ensure_token(self) -> jwtmod.Token:
-        now = int(time.time())
+        now = self._wall_clock()
         if (
             self._token is not None
             and not self._token.should_renew(now, self.token_cfg.renew_before_seconds)
         ):
             return self._token
         tok = jwtmod.sign_jwt(
-            self.public_key,
-            self.private_key,
-            self.broker.audience,
-            self.broker.client,
-            self.token_cfg.ttl_seconds,
+            public_key=self.public_key,
+            private_key=self.private_key,
+            audience=self.broker.audience,
+            client=self.broker.client,
+            ttl_seconds=self.token_cfg.ttl_seconds,
             now=now,
         )
         if self.debug.tokens:
@@ -111,10 +131,10 @@ class Sink:
         # lifetime minus the renewal lead, from now.
         remaining = max(0.0, float(tok.exp - now))
         lead = min(float(self.token_cfg.renew_before_seconds), remaining)
-        self._renew_at = time.monotonic() + max(0.0, remaining - lead)
+        self._renew_at = self._mono_clock() + max(0.0, remaining - lead)
         return tok
 
-    def _make_client(self) -> mqtt.Client:
+    def _make_paho_client(self) -> MqttClient:
         c = mqtt.Client(
             mqtt.CallbackAPIVersion.VERSION2,
             client_id=self.broker.client,
@@ -179,7 +199,7 @@ class Sink:
         except OverflowError:
             delay = r.max_delay
         delay = min(delay, r.max_delay)
-        delay *= 1.0 - random.uniform(0, r.jitter)
+        delay *= 1.0 - self._rng.uniform(0, r.jitter)
         return max(delay, 0.0)
 
     # -- client lifecycle --
@@ -245,12 +265,12 @@ class Sink:
 
     def _wait_with_summary(self, delay: float) -> None:
         """Sleep before a retry in slices, keeping the drop summary alive."""
-        end = time.monotonic() + delay
+        end = self._mono_clock() + delay
         slice_ = self.runtime.token_check_seconds
         if self.runtime.summary_interval_seconds > 0:
             slice_ = min(slice_, self.runtime.summary_interval_seconds)
         while not self._stop.is_set():
-            now = time.monotonic()
+            now = self._mono_clock()
             if now >= end:
                 return
             self._maybe_summary(now)
@@ -258,7 +278,7 @@ class Sink:
 
     def _connect_and_serve(self) -> str:
         self._auth_failed = False
-        client = self._make_client()
+        client = self._client_factory()
         with self._client_lock:
             self._client = client
         client.connect(
@@ -277,12 +297,12 @@ class Sink:
                     "%s: disconnect failed", self.broker.name, exc_info=True
                 )
 
-    def _serve(self, client: mqtt.Client) -> str:
+    def _serve(self, client: MqttClient) -> str:
         """Wait on a live connection; return why it ended."""
         connected_once = self.connected
-        deadline = time.monotonic() + self.runtime.connect_timeout_seconds
+        deadline = self._mono_clock() + self.runtime.connect_timeout_seconds
         while not self._stop.is_set():
-            now = time.monotonic()
+            now = self._mono_clock()
             if self.connected:
                 connected_once = True
             elif connected_once:

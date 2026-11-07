@@ -5,6 +5,14 @@ of target brokers, token lifetime, reconnect policy, and logging. Secrets
 (the private key) are referenced by env-var name or file path, never
 inlined.
 
+Three entry points, all validating identically:
+
+- ``load(path)``       -- a YAML file (adds a file-mode warning);
+- ``loads(text)``      -- a YAML string (needs PyYAML, imported lazily);
+- ``from_dict(raw)``   -- an already-parsed mapping (no PyYAML needed).
+
+``load_config`` is the documented alias for ``load``.
+
 Validation is strict on purpose:
 
 - every section has a key whitelist, so a typo cannot be silently ignored;
@@ -13,6 +21,9 @@ Validation is strict on purpose:
 - disabling TLS requires a second, explicit opt-in (tls.plaintext: true);
 - numbers are range-checked and bad conversions are ConfigError;
 - hostnames are syntax-checked only (DNS is resolved at connect time).
+
+The resulting Config (and its sections) are frozen: a Config never carries
+a resolved secret, and ``repr(cfg)`` is safe to log.
 """
 from __future__ import annotations
 
@@ -21,12 +32,12 @@ import os
 import re
 import socket
 import stat
-from typing import Any
+from typing import Any, Mapping
 
-import yaml
+from .errors import MeshfanError
 
 
-class ConfigError(Exception):
+class ConfigError(MeshfanError):
     """Raised when the config is missing or invalid."""
 
 
@@ -34,6 +45,19 @@ class ConfigError(Exception):
 DEFAULT_AGE_COMMAND = "age-sctl"
 DEFAULT_PASSPHRASE_ENV = "MESHFAN_AGE_PASSPHRASE"
 DEFAULT_AGE_TIMEOUT = 30.0
+
+
+def _yaml():
+    """Import PyYAML lazily so the pure modules never require it."""
+    try:
+        import yaml
+    except ImportError as e:
+        raise MeshfanError(
+            "PyYAML is required to parse a YAML config; install it with "
+            "`pip install meshfan[config]`, or call "
+            "meshfan.config.from_dict() with an already-parsed mapping"
+        ) from e
+    return yaml
 
 
 # --- small parsers ---------------------------------------------------------
@@ -187,16 +211,23 @@ def _host(value: str, section: str) -> str:
     return value
 
 
-def _default_client_id() -> str:
-    """A unique-ish source client id, so two relays cannot kick each other."""
+def default_client_id() -> str:
+    """A unique-ish source client id, so two relays cannot kick each other.
+
+    Resolved at startup (meshfan.app), not at config-build time: a Config
+    must stay deterministic, so the same file always parses to the same
+    Config.
+    """
     host = re.sub(r"[^A-Za-z0-9._-]", "-", socket.gethostname())[:40]
     return f"meshfan-{host}-{os.getpid()}"
 
 
 # --- config objects --------------------------------------------------------
+# All frozen: a Config never carries a resolved secret, and mutating it is
+# a programming error.
 
 
-@dataclasses.dataclass
+@dataclasses.dataclass(frozen=True)
 class TlsConfig:
     enabled: bool = True
     insecure: bool = False
@@ -204,35 +235,40 @@ class TlsConfig:
     ca_file: str | None = None
 
 
-@dataclasses.dataclass
+@dataclasses.dataclass(frozen=True)
 class SourceConfig:
     host: str
     port: int
     topic: str
     username: str | None = None
-    # The resolved password (filled in by __main__ from *_env / *_file).
-    password: str | None = None
+    # An inline password (deprecated). Never a resolved one: the resolved
+    # password lives in meshfan.app.ResolvedSecrets, so repr(cfg) is safe.
+    password: str | None = dataclasses.field(default=None, repr=False)
     password_env: str | None = None
     password_file: str | None = None
-    client_id: str = dataclasses.field(default_factory=_default_client_id)
+    # None means "resolve at startup" (default_client_id()); the Config
+    # itself stays deterministic.
+    client_id: str | None = None
     keepalive: int = 30
     qos: int = 0
     tls: TlsConfig = dataclasses.field(default_factory=TlsConfig)
 
 
-@dataclasses.dataclass
+@dataclasses.dataclass(frozen=True)
 class BrokerConfig:
     name: str
     host: str
     port: int
     path: str
     audience: str
+    # The MQTT client id (`client` claim). Optional in the config: it
+    # defaults to "meshfan-<name>" (resolved here, deterministically).
     client: str
     keepalive: int = 30
     tls: TlsConfig = dataclasses.field(default_factory=TlsConfig)
 
 
-@dataclasses.dataclass
+@dataclasses.dataclass(frozen=True)
 class KeyConfig:
     public_key: str
     private_key_env: str | None = None
@@ -244,13 +280,13 @@ class KeyConfig:
     age_timeout_seconds: float = DEFAULT_AGE_TIMEOUT
 
 
-@dataclasses.dataclass
+@dataclasses.dataclass(frozen=True)
 class TokenConfig:
     ttl_seconds: int = 3600
     renew_before_seconds: int = 360
 
 
-@dataclasses.dataclass
+@dataclasses.dataclass(frozen=True)
 class ReconnectConfig:
     base_delay: float = 1.0
     max_delay: float = 60.0
@@ -258,7 +294,7 @@ class ReconnectConfig:
     jitter: float = 0.5
 
 
-@dataclasses.dataclass
+@dataclasses.dataclass(frozen=True)
 class RuntimeConfig:
     max_queued_messages: int = 1000
     shutdown_timeout: float = 5.0
@@ -271,7 +307,7 @@ class RuntimeConfig:
     summary_interval_seconds: float = 300.0
 
 
-@dataclasses.dataclass
+@dataclasses.dataclass(frozen=True)
 class LoggingConfig:
     level: str = "INFO"
     output: str = "stdout"  # stdout | file | syslog
@@ -280,24 +316,24 @@ class LoggingConfig:
     backup_count: int = 5
 
 
-@dataclasses.dataclass
+@dataclasses.dataclass(frozen=True)
 class DebugConfig:
     messages: bool = False
     tokens: bool = False
     paho: bool = False
 
 
-@dataclasses.dataclass
+@dataclasses.dataclass(frozen=True)
 class Config:
     source: SourceConfig
     key: KeyConfig
-    brokers: list[BrokerConfig]
+    brokers: tuple[BrokerConfig, ...]
     token: TokenConfig
     reconnect: ReconnectConfig
     runtime: RuntimeConfig
     logging: LoggingConfig
     debug: DebugConfig
-    warnings: list[str] = dataclasses.field(default_factory=list)
+    warnings: tuple[str, ...] = dataclasses.field(default_factory=tuple)
 
 
 # --- section builders ------------------------------------------------------
@@ -378,8 +414,6 @@ def _build_source(raw: object) -> SourceConfig:
         raise ConfigError("source: use only one of password_env, password_file")
 
     client_id = _str(raw, "client_id", "source")
-    if client_id is None:
-        client_id = _default_client_id()
     keepalive = _int(raw, "keepalive", "source", 30)
     if keepalive < 1:
         raise ConfigError("source: keepalive must be >= 1")
@@ -395,7 +429,7 @@ def _build_source(raw: object) -> SourceConfig:
         password=password or None,
         password_env=password_env,
         password_file=password_file,
-        client_id=_client(client_id, "source.client_id"),
+        client_id=_client(client_id, "source.client_id") if client_id else None,
         keepalive=keepalive,
         qos=qos,
         tls=_tls(raw.get("tls"), "source.tls", "source"),
@@ -473,7 +507,7 @@ def _build_key(raw: object, warnings: list[str]) -> KeyConfig:
     )
 
 
-def _build_brokers(raw: object) -> list[BrokerConfig]:
+def _build_brokers(raw: object) -> tuple[BrokerConfig, ...]:
     if not isinstance(raw, list) or not raw:
         raise ConfigError("brokers must be a non-empty list")
     brokers: list[BrokerConfig] = []
@@ -496,6 +530,11 @@ def _build_brokers(raw: object) -> list[BrokerConfig]:
         keepalive = _int(item, "keepalive", section, 30)
         if keepalive < 1:
             raise ConfigError(f"{section}: keepalive must be >= 1")
+        client = _str(item, "client", section)
+        if client is None:
+            # Optional per broker; the default is deterministic in the name,
+            # so two relays on the same broker do not kick each other.
+            client = f"meshfan-{name}"
         brokers.append(
             BrokerConfig(
                 name=name,
@@ -503,12 +542,12 @@ def _build_brokers(raw: object) -> list[BrokerConfig]:
                 port=_port(item, "port", section),
                 path=_path(str(_req(item, "path", section)), section),
                 audience=_audience(str(_req(item, "audience", section)), section),
-                client=_client(str(_req(item, "client", section)), section),
+                client=_client(client, f"{section}.client"),
                 keepalive=keepalive,
                 tls=_tls(item.get("tls"), f"{section}.tls", "sink"),
             )
         )
-    return brokers
+    return tuple(brokers)
 
 
 def _build_token(raw: object) -> TokenConfig:
@@ -640,7 +679,16 @@ def _build_debug(raw: object) -> DebugConfig:
     )
 
 
-def _build(raw: dict[str, Any], warnings: list[str]) -> Config:
+def from_dict(
+    raw: Mapping[str, Any], warnings: list[str] | None = None
+) -> Config:
+    """Build and validate a Config from an already-parsed mapping.
+
+    No file I/O and no PyYAML: the mapping may come from env vars, Vault,
+    or a k8s Secret. Validation is identical to load()/loads().
+    """
+    if warnings is None:
+        warnings = []
     _unknown(
         raw,
         {"source", "key", "brokers", "token", "reconnect", "runtime", "logging", "debug"},
@@ -655,11 +703,11 @@ def _build(raw: dict[str, Any], warnings: list[str]) -> Config:
         runtime=_build_runtime(raw.get("runtime")),
         logging=_build_logging(raw.get("logging")),
         debug=_build_debug(raw.get("debug")),
-        warnings=warnings,
+        warnings=tuple(warnings),
     )
 
 
-def _yaml_error_message(exc: yaml.YAMLError) -> str:
+def _yaml_error_message(exc: Exception) -> str:
     """Only the parser's problem/context, never str(exc) (may echo content)."""
     problem = getattr(exc, "problem", None)
     context = getattr(exc, "context", None)
@@ -669,8 +717,28 @@ def _yaml_error_message(exc: yaml.YAMLError) -> str:
         where = f" at line {mark.line + 1}, column {mark.column + 1}"
     parts = [p for p in (context, problem) if p]
     return ("invalid YAML: " + ": ".join(parts) + where) if parts else (
-        "invalid YAML: could not parse the file"
+        "invalid YAML: could not parse the text"
     )
+
+
+def loads(text: str, warnings: list[str] | None = None) -> Config:
+    """Parse and validate a YAML config string.
+
+    PyYAML is imported lazily; the pure modules (jwt, key parsing) never
+    need it.
+    """
+    if warnings is None:
+        warnings = []
+    yaml = _yaml()
+    try:
+        raw = yaml.safe_load(text)
+    except yaml.YAMLError as e:
+        raise ConfigError(_yaml_error_message(e)) from e
+    except UnicodeDecodeError as e:
+        raise ConfigError("config is not valid UTF-8") from e
+    if not isinstance(raw, dict):
+        raise ConfigError("config root must be a mapping")
+    return from_dict(raw, warnings)
 
 
 def load(path: str) -> Config:
@@ -692,18 +760,18 @@ def load(path: str) -> Config:
 
     try:
         with open(path, "r", encoding="utf-8") as f:
-            raw = yaml.safe_load(f)
+            text = f.read()
     except FileNotFoundError as e:
         raise ConfigError(f"config file not found: {path}") from e
     except PermissionError as e:
         raise ConfigError(f"config file is not readable: {path}") from e
-    except yaml.YAMLError as e:
-        raise ConfigError(_yaml_error_message(e)) from e
     except UnicodeDecodeError as e:
         raise ConfigError(f"config file is not valid UTF-8: {path}") from e
     except OSError as e:
         raise ConfigError(f"cannot read config file {path}: {e.strerror or e}") from e
 
-    if not isinstance(raw, dict):
-        raise ConfigError("config root must be a mapping")
-    return _build(raw, warnings)
+    return loads(text, warnings)
+
+
+#: The documented alias for load(): read a YAML config file.
+load_config = load

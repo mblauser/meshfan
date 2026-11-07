@@ -8,27 +8,40 @@ from __future__ import annotations
 import logging
 import ssl
 
+from typing import Callable
+
 import paho.mqtt.client as mqtt
 
-from .config import SourceConfig
+from .config import ConfigError, SourceConfig
 from .log import sanitize
+from .transport import MqttClient, MqttClientFactory
 
 log = logging.getLogger("meshfan.source")
 
 
 class Source:
-    def __init__(self, cfg: SourceConfig, on_message, ssl_ctx: ssl.SSLContext | None) -> None:
+    def __init__(
+        self,
+        cfg: SourceConfig,
+        on_message: Callable[[str, bytes, int], None],
+        ssl_ctx: ssl.SSLContext | None,
+        *,
+        client_factory: MqttClientFactory | None = None,
+    ) -> None:
         self.cfg = cfg
         self.on_message = on_message
         if cfg.tls.enabled and ssl_ctx is None:
-            raise ValueError("source: TLS is enabled but no SSL context was supplied")
+            raise ConfigError("source: TLS is enabled but no SSL context was supplied")
         if not cfg.tls.enabled and ssl_ctx is not None:
-            raise ValueError("source: TLS is disabled but an SSL context was supplied")
+            raise ConfigError("source: TLS is disabled but an SSL context was supplied")
         self._ssl_ctx = ssl_ctx
-        self._client: mqtt.Client | None = None
+        self._client_factory = (
+            client_factory if client_factory is not None else self._make_paho_client
+        )
+        self._client: MqttClient | None = None
         self.connected = False
 
-    def _make_client(self) -> mqtt.Client:
+    def _make_paho_client(self) -> MqttClient:
         c = mqtt.Client(
             mqtt.CallbackAPIVersion.VERSION2,
             client_id=self.cfg.client_id,
@@ -68,7 +81,7 @@ class Source:
         self.on_message(msg.topic, msg.payload, msg.qos)
 
     def start(self) -> None:
-        self._client = self._make_client()
+        self._client = self._client_factory()
         try:
             self._client.connect(
                 self.cfg.host, self.cfg.port, keepalive=self.cfg.keepalive

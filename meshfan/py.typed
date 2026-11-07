@@ -1,0 +1,2 @@
+# meshfan ships full type annotations; this marker tells type checkers
+# (PEP 561) to trust them.

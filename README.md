@@ -1,0 +1,159 @@
+# meshfan
+
+An MQTT fan-out relay that signs **Ed25519 device JWTs** for MeshCore
+MQTT-over-WebSocket (WSS) brokers. meshfan subscribes to one MQTT source
+and republishes every message to a list of WSS brokers. Each target is
+authenticated with a short-lived Ed25519 device JWT (MeshCore "device
+signing") that meshfan signs with the node's private key — no broker can
+sign that JWT itself, which is the gap meshfan fills.
+
+> **The token is not a standard RFC 7519 JWT and is not
+> PyJWT-compatible.** The header `alg` is `Ed25519` (not `EdDSA`), the
+> signature is **UPPERCASE hex** (not base64url), and the JSON is
+> serialized with no whitespace. Match these exactly or the broker
+> rejects the token. See [docs/JWT.md](docs/JWT.md).
+
+## Install
+
+```sh
+pip install meshfan            # pure signer: only ed25519-orlp
+pip install meshfan[daemon]    # + the MQTT relay (paho-mqtt)
+pip install meshfan[config]    # + YAML config parsing (PyYAML, imported lazily)
+pip install meshfan[full]      # daemon + config
+```
+
+Requires Python 3.10+.
+
+## Quick start (the relay)
+
+1. **Create a starter config** (mode 0600) from the packaged example:
+
+   ```sh
+   meshfan --init-config /etc/meshfan/meshfan.yaml
+   ```
+
+   (In a source checkout, the example is `config/meshfan.example.yaml`.)
+
+2. **Generate a MeshCore Ed25519 keypair** (or use your existing one):
+
+   ```sh
+   meshfan key generate --out /etc/meshfan/key.plain --pub-out /etc/meshfan/key.pub
+   ```
+
+   Put the printed 64-hex public key into the config's `key.public_key`.
+
+3. **Encrypt the private key with age** (recommended; the passphrase is
+   read from an env var, never from argv):
+
+   ```sh
+   export MESHFAN_AGE_PASSPHRASE=...
+   meshfan key encrypt --in /etc/meshfan/key.plain \
+       --out /etc/meshfan/key.age --passphrase-env MESHFAN_AGE_PASSPHRASE
+   ```
+
+   Then set `key.encryption: age`, `key.private_key_file:
+   /etc/meshfan/key.age`, and `key.passphrase_env:
+   MESHFAN_AGE_PASSPHRASE` in the config.
+
+4. **Validate everything without touching the network:**
+
+   ```sh
+   meshfan --config /etc/meshfan/meshfan.yaml --check
+   ```
+
+5. **Run the relay:**
+
+   ```sh
+   meshfan --config /etc/meshfan/meshfan.yaml
+   ```
+
+### Minimal config
+
+```yaml
+source:
+  host: 127.0.0.1
+  port: 1883
+  topic: "meshcore/#"
+  tls:
+    enabled: false
+    plaintext: true        # second explicit opt-in required when disabled
+
+key:
+  private_key_env: MESHFAN_PRIVATE_KEY   # 128-hex MeshCore expanded key
+  public_key: "0123456789abcdef..."     # 64-hex, must match the private key
+
+brokers:
+  - name: meshomatic
+    host: us-east.meshomatic.net
+    port: 443
+    path: /mqtt
+    audience: map.meshomatic.net
+    # client: meshfan-meshomatic   # default: meshfan-<name>
+```
+
+Unknown keys are rejected: a typo is a config error, never silently
+ignored. Disabling TLS requires the second explicit opt-in
+(`tls.plaintext: true`). Secrets are referenced by env-var name or
+file path, never inlined.
+
+## Sign a token by hand
+
+```sh
+meshfan jwt sign --aud map.example.net --client meshfan-1
+# token: eyJ...<uppercase-hex signature>
+# exp: 1751881234
+```
+
+The key is never printed; only the token and its expiry are.
+
+## Use the signer without the daemon
+
+The pure signer needs only `ed25519-orlp` (no paho, no PyYAML):
+
+```python
+from meshfan import sign_jwt, verify
+
+public_key = bytes.fromhex("0123456789abcdef...")   # 32 bytes
+private_key = bytes.fromhex("0123456789abcdef...")  # 64 bytes (MeshCore expanded)
+
+token = sign_jwt(
+    public_key=public_key,
+    private_key=private_key,
+    audience="map.example.net",
+    client="meshfan-1",
+    ttl_seconds=3600,
+)
+print(token.value, token.exp)
+
+assert verify(token.value, public_key) is True
+assert verify(token.value, other_public_key) is False
+```
+
+`sign_jwt` validates its arguments (32-byte public / 64-byte private,
+`ttl_seconds > 0`, non-empty `aud`/`client`) and takes them
+keyword-only, so the keys cannot be swapped silently. `verify` returns
+`False` on a bad signature and raises `MeshfanError` on a malformed
+token. To embed the relay in a process, use `meshfan.app.MeshfanApp`
+(`start()`/`stop()`) — it has no signal, RLIMIT, or global-logging side
+effects; those belong to the CLI.
+
+## Library surface
+
+```python
+import meshfan
+
+meshfan.sign_jwt(...)        # sign a device JWT
+meshfan.verify(token, pub)   # verify a device JWT
+meshfan.Token               # signed value + expiry
+meshfan.load_config(path)   # load + validate a YAML config file
+meshfan.loads(text)         # same, from a YAML string
+meshfan.from_dict(raw)      # same, from a parsed mapping (no PyYAML)
+meshfan.Config              # frozen; repr() never contains a secret
+meshfan.MeshfanError        # base class for ConfigError / KeyLoadError
+```
+
+## Documentation
+
+- [docs/SPEC.md](docs/SPEC.md) — the design specification
+- [docs/JWT.md](docs/JWT.md) — the exact wire format (byte-exact)
+- [docs/RESEARCH.md](docs/RESEARCH.md) — research record
