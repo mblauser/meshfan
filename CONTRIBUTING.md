@@ -40,7 +40,7 @@ The test suite is network-isolated: no test needs a broker (the
 - **Dependency changes update the locks.** If you change a constraint
   in `pyproject.toml`, also update `requirements.in` /
   `requirements-dev.in` and regenerate the locks (`pip-compile`, see
-  the README). CI fails if the locks are stale.
+  the README). CI verifies the locks install cleanly on every supported Python.
 
 ## Pull requests
 

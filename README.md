@@ -80,8 +80,12 @@ pip-compile requirements.in -o requirements.lock
 pip-compile requirements-dev.in -o requirements-dev.lock
 ```
 
-CI checks that the locks are up to date with the `.in` files
-(`pip-compile --check`).
+CI verifies the locks install cleanly on every supported Python
+(`pip install -r requirements.lock` and `-r requirements-dev.lock`).
+A single lock cannot be "the latest resolution" for every Python
+version at once (resolution is version-dependent), so CI checks
+installability rather than freshness: regenerate a lock when you change
+a constraint in `pyproject.toml`.
 
 ## Quick start (the relay)
 
