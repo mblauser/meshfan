@@ -203,16 +203,30 @@ test seam, file-only config loading, unknown keys silently ignored, ValueError
 tracebacks instead of ConfigError, unenforced chmod-600 claim, dependencies not
 split, jwt.py missing length validation and a verify() helper.
 
+Done:
+
+- [x] Tests (JWT known-answer, config validation, key loading, sink
+  renewal/backoff, fanout, app, cli exit codes): 155 passing.
+- [x] docs/ARCHITECTURE.md, docs/SECURITY.md, docs/CONFIGURATION.md,
+  docs/DEPLOYMENT.md.
+- [x] README.md, CHANGELOG.md, CONTRIBUTING.md, top-level SECURITY.md.
+- [x] contrib/systemd/meshfan.service (sets LimitCORE=0 per the security
+  review).
+- [x] .github/workflows/ci.yml (matrix 3.10-3.14).
+
 Not done:
 
-- [ ] Tests (JWT signing vs reference, config validation, key loading).
-- [ ] docs/ARCHITECTURE.md, docs/SECURITY.md, docs/CONFIGURATION.md,
-  docs/DEPLOYMENT.md.
-- [ ] README.md, CHANGELOG.md, CONTRIBUTING.md, SECURITY.md.
-- [ ] contrib/systemd/meshfan.service (must set LimitCORE=0 per the security
-  review).
-- [ ] .github/workflows/ci.yml.
-- [ ] Release artifacts (version, tags, release notes).
+- [ ] Release: tag v0.1.0 + release notes are ready locally; the push to
+  GitHub needs the real repo URL.
+- [ ] Verify the `age-sctl` CLI contract on a machine that has it.
+  Neither the dev machine nor PXEpi has `age-sctl` or `age` installed,
+  and there is no public `age-sctl` repository, so it cannot be verified
+  from here. The contract is isolated in `key.py:_age_argv` (a one-line
+  fix) and a verification snippet is in docs/DEPLOYMENT.md.
+- [ ] PXEpi deploy. Verified on the box: system Python is 3.7.3 (buster
+  apt only offers 3.7.3, so CPython 3.11 must be built from source into
+  its own prefix); `age-sctl`/`age` absent (use the env-var or 0600-file
+  key path, not age); gcc present; 15G free.
 
 ## 8. Open questions and roadblocks
 

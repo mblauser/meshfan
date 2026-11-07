@@ -1,0 +1,25 @@
+[Unit]
+Description=meshfan MQTT fan-out relay
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=meshfan
+# The key and passphrase variables, in a mode-0600 file, not in
+# Environment= (which would be visible in `systemctl show`).
+EnvironmentFile=/etc/meshfan/env
+ExecStart=/opt/meshfan/venv/bin/meshfan --config /etc/meshfan/meshfan.yaml
+Restart=on-failure
+RestartSec=5
+# The key must not reach a core dump. The CLI process also zeroes
+# RLIMIT_CORE itself; this is the second, independent layer.
+LimitCORE=0
+UMask=0077
+NoNewPrivileges=true
+ProtectSystem=full
+ProtectHome=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

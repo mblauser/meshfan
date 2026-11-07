@@ -4,7 +4,7 @@ An MQTT fan-out relay that signs **Ed25519 device JWTs** for MeshCore
 MQTT-over-WebSocket (WSS) brokers. meshfan subscribes to one MQTT source
 and republishes every message to a list of WSS brokers. Each target is
 authenticated with a short-lived Ed25519 device JWT (MeshCore "device
-signing") that meshfan signs with the node's private key — no broker can
+signing") that meshfan signs with the node's private key; no broker can
 sign that JWT itself, which is the gap meshfan fills.
 
 > **The token is not a standard RFC 7519 JWT and is not
@@ -134,7 +134,7 @@ assert verify(token.value, other_public_key) is False
 keyword-only, so the keys cannot be swapped silently. `verify` returns
 `False` on a bad signature and raises `MeshfanError` on a malformed
 token. To embed the relay in a process, use `meshfan.app.MeshfanApp`
-(`start()`/`stop()`) — it has no signal, RLIMIT, or global-logging side
+(`start()`/`stop()`): it has no signal, RLIMIT, or global-logging side
 effects; those belong to the CLI.
 
 ## Library surface
@@ -154,6 +154,10 @@ meshfan.MeshfanError        # base class for ConfigError / KeyLoadError
 
 ## Documentation
 
-- [docs/SPEC.md](docs/SPEC.md) — the design specification
-- [docs/JWT.md](docs/JWT.md) — the exact wire format (byte-exact)
-- [docs/RESEARCH.md](docs/RESEARCH.md) — research record
+- [docs/SPEC.md](docs/SPEC.md): the design specification
+- [docs/JWT.md](docs/JWT.md): the exact wire format (byte-exact)
+- [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md): modules, threading, token lifecycle
+- [docs/SECURITY.md](docs/SECURITY.md): key handling, TLS, logging, validation
+- [docs/CONFIGURATION.md](docs/CONFIGURATION.md): every key, default, and range
+- [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md): install, systemd, PXEpi, age-sctl
+- [docs/RESEARCH.md](docs/RESEARCH.md): research record
