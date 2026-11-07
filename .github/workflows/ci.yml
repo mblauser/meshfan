@@ -28,7 +28,7 @@ jobs:
         run: |
           python -c "
           from ed25519_orlp import ed25519_sign, ed25519_verify, ed25519_create_keypair
-          _seed, pub, priv = ed25519_create_keypair()
+          pub, priv, _seed = ed25519_create_keypair()
           sig = ed25519_sign(b'ci probe', pub, priv)
           assert ed25519_verify(sig, b'ci probe', pub)
           print('ed25519-orlp OK')
