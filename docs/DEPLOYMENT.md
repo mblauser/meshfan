@@ -7,8 +7,10 @@
   runtime. Verified by installing 0.1.3 into a 3.9 venv and a 3.10
   venv.)
 - `ed25519-orlp` 0.1.x. Wheels exist for macOS arm64 and x86_64
-  Linux. **There is no armv7l wheel in 0.1.3**, so on an armv7l
-  machine (like PXEpi) the sdist must be built, which needs `gcc`.
+  Linux on PyPI. On an armv7l machine (like PXEpi / Raspberry Pi OS)
+  the **armv7l wheel is available on piwheels** (the default `pip`
+  index there), so it installs as a wheel. If the box is not using
+  piwheels, the sdist is built with `gcc` instead.
 - `age-sctl` (the age CLI) if you use an age-encrypted key file.
 
 ## Install (a normal machine)
@@ -131,8 +133,11 @@ PXEpi-specific rules for the deploy:
 
 ### What the box has (verified)
 
-- `gcc` is present. `ed25519-orlp` has no armv7l wheel in 0.1.3, so
-  it is built from the sdist with gcc.
+- **`ed25519-orlp` 0.1.3 has an armv7l wheel on piwheels** (the
+  Raspberry Pi wheel index, which `pip` on Raspberry Pi OS uses by
+  default), so it installs as a wheel with no build. (The earlier
+  "no armv7l wheel" finding was about PyPI; if the box is not using
+  piwheels, the sdist is built with gcc, which is present.)
 - **The system Python is 3.7.3, and buster's apt only offers 3.7.3.**
   meshfan needs 3.10+. A newer CPython (3.11) must be built from
   source into its own prefix (for example `/usr/local` or
@@ -151,8 +156,9 @@ PXEpi-specific rules for the deploy:
 
    ```sh
    /opt/python3.11/bin/python3.11 -m venv /opt/meshfan/venv
-   /opt/meshfan/venv/bin/pip install "meshfan[full]"
-   # pip downloads the ed25519-orlp sdist and builds it with gcc
+   # pinned, reproducible install (ed25519-orlp from the piwheels wheel)
+   /opt/meshfan/venv/bin/pip install -r requirements.lock
+   /opt/meshfan/venv/bin/pip install --no-deps meshfan-0.1.0-py3-none-any.whl
    /opt/meshfan/venv/bin/meshfan --version
    ```
 
