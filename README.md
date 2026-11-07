@@ -1,11 +1,12 @@
 # meshfan
 
 An MQTT fan-out relay that signs **Ed25519 device JWTs** for MeshCore
-MQTT-over-WebSocket (WSS) brokers. meshfan subscribes to one MQTT source
-and republishes every message to a list of WSS brokers. Each target is
-authenticated with a short-lived Ed25519 device JWT (MeshCore "device
-signing") that meshfan signs with the node's private key; no broker can
-sign that JWT itself, which is the gap meshfan fills.
+MQTT-over-WebSocket (WSS) brokers. The "fan-out" is the relay itself:
+one MQTT source (one or more topics) is fanned out to a list of WSS
+broker targets, and each target is authenticated with a short-lived
+Ed25519 device JWT (MeshCore "device signing") that meshfan signs with
+the node's private key. No broker can sign that JWT itself, which is the
+gap meshfan fills.
 
 > **The token is not a standard RFC 7519 JWT and is not
 > PyJWT-compatible.** The header `alg` is `Ed25519` (not `EdDSA`), the
