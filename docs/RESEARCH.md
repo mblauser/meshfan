@@ -214,10 +214,15 @@ Done:
   review).
 - [x] .github/workflows/ci.yml (matrix 3.10-3.14).
 
+Done:
+
+- [x] Release: repo `mblauser/meshfan` created (public), branch `main`
+  pushed, tag `v0.1.0` pushed, release published from
+  docs/RELEASE-v0.1.0.md
+  (https://github.com/mblauser/meshfan/releases/tag/v0.1.0).
+
 Not done:
 
-- [ ] Release: tag v0.1.0 + release notes are ready locally; the push to
-  GitHub needs the real repo URL.
 - [ ] Verify the `age-sctl` CLI contract on a machine that has it.
   Neither the dev machine nor PXEpi has `age-sctl` or `age` installed,
   and there is no public `age-sctl` repository, so it cannot be verified
